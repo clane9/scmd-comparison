@@ -1,0 +1,3 @@
+[submodule "external/CORE_KSS"]
+	path = external/CORE_KSS
+	url = https://github.com/clane9/core-clustering
