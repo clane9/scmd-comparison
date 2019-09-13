@@ -1,20 +1,23 @@
-function [A, r] = prox_nuc(X, lamb, r0, incre)
+function [A, r, sthr] = prox_nuc(X, lamb, r0, incre)
 % prox_nuc    Evaluate proximal operator of nuclear norm.
 %
-%   A = prox_nuc(X, lamb, r0)
+%   min_A lamb || A ||_* + 1/2 || A - X ||_F^2
+%
+%   [A, sthr, r] = prox_nuc(X, lamb, r0, incre)
 %
 %   Args:
 %     X: D x N matrix.
 %     lamb: Singular value threshold.
 %     r0: Guess of threshold rank. If provided and positive, will use svds to
 %       compute only a few singular vectors, incrementing by incre until
-%       threshold rank is found (Follows SVT.m written by Candes et al).
+%       threshold rank is found (follows SVT.m written by Candes et al).
 %     incre: How much to increment rank by if smallest singular value exceeds
 %       threshold [default: max(5, ceil(.05*min(size(X))))].
 %
 %   Returns:
-%     A: D x N thresholded matrix.
-%     r: Rank of A.
+%     A: D x N thresholded matrix
+%     r: Rank of A
+%     sthr: r x 1 soft-thresholded singular values
 
 % Short-circuit option for trivial case.
 mindim = min(size(X));
