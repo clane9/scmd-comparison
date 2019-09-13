@@ -1,65 +1,91 @@
-function [L, history] = alm_mc(M, Omega, params)
+function [Y, history] = alm_mc(X, Omega, Y0, params)
 % alm_mc    Inexact ALM algorithm for matrix completion from Lin et al 2009.
 %   Solves formulation
 %
-%   min_L ||L||_* s.t. L = M + E, P_Omega(E) = 0
+%   min_Y ||Y||_* s.t. X = Y + E, P_Omega(E) = 0
 %
-%   [L, history] = alm_mc(M, Omega, params)
+%   [Y, history] = alm_mc(X, Omega, params)
 %
 %   Args:
-%     M: D x N incomplete data matrix.
-%     Omega: D x N logical indicator of observed entries.
-%     params: Struct containing problem parameters.
-%       mu: ALM penalty parameter [default: 1/||M||_{2,1}].
-%       alpha: rate for increading mu after each iteration [default: 1.1].
-%       maxIter: [default: 100].
-%       convThr: [default: 1e-3].
-%       prtLevel: 1=basic per-iteration output [default: 0].
-%       logLevel: 0=basic summary info, 1=detailed per-iteration info
+%     X: D x N incomplete data matrix
+%     Omega: D x N logical indicator of observed entries
+%     Y0: D x N initial guess for low-rank completion.
+%     params: Struct containing problem parameters
+%       mu: ALM penalty parameter [default: 1/||X||_{2,1}]
+%       alpha: rate for increasing mu after each iteration [default: 1.1]
+%       maxit: maximum iterations [default: 500]
+%       tol: stopping tolerance [default: 1e-5]
+%       prtlevel: 1=basic per-iteration output [default: 0]
+%       loglevel: 0=basic summary info, 1=detailed per-iteration info
 %         [default: 0]
 %
 %   Returns:
-%     L: D x N low-rank completion.
+%     Y: D x N low-rank completion.
 %     history: Struct containing diagnostic info.
-if nargin < 3; params = struct; end
-% Set defaults.
-% see page 6 in https://pdfs.semanticscholar.org/1556/6adc0e6312b72290c31f891bdb080c06d997.pdf
-% for mu/alpha default justification.
-fields = {'mu', 'alpha', 'maxIter', 'convThr', 'prtLevel', 'logLevel'};
-defaults = {1/sum(sqrt( sum(M .^2, 1) )), 1.1, 100, 1e-3, 0, 0};
-for i=1:length(fields)
-  if ~isfield(params, fields{i})
-    params.(fields{i}) = defaults{i};
-  end
-end
-mu = params.mu; alpha = params.alpha;
-tstart = tic; % start timer.
+%
+%   References:
+%     Lin, Z., Chen, M., & Ma, Y. (2010). The augmented lagrange multiplier
+%     method for exact recovery of corrupted low-rank matrices. arXiv preprint
+%     arXiv:1009.5055.
+%
+%     Chen, Y., Xu, H., Caramanis, C., & Sanghavi, S. (2011). Robust matrix
+%     completion and corrupted columns. In Proceedings of the 28th
+%     International Conference on Machine Learning (ICML-11) (pp. 873-880).
+tstart = tic;
+[D, N] = size(X);
+Omega = logical(Omega);
+Omegac = ~Omega;
+X(Omegac) = 0;
 
-Omega = logical(Omega); Omegac = ~Omega;
-M(Omegac) = 0; % zero-fill missing entries.
-[D, N] = size(M);
-L = zeros(D, N);
-E = zeros(D, N);
+if nargin < 3
+  params = struct;
+end
+% set defaults
+% see page 6 in (Chen et al., 2011) for mu/alpha default justification
+% https://pdfs.semanticscholar.org/1556/6adc0e6312b72290c31f891bdb080c06d997.pdf
+fields = {'mu', 'alpha', 'maxit', 'tol', 'prtlevel', 'loglevel'};
+defaults = {1/sum(sqrt( sum(X.^2, 1) )), 1.1, 500, 1e-5, 0, 0};
+params = set_default_params(params, fields, defaults);
+
+if ~isempty(Y0);
+  Y = Y0;
+else
+  Y = zeros(D, N);
+end
 U = zeros(D, N);
 
-relthr = infnorm(M);
+mu = params.mu;
+relthr = max(infnorm(X(Omega)), 1e-3);
 history.status = 1;
-for kk=1:params.maxIter
-  L = prox_nuc(M - E + U, 1/mu);
-  E = Omegac.*(M-L + U);
-  U = U + (M - E - L);
-  feas = infnorm(M - E - L)/ relthr;
-  if params.prtLevel > 0
-    fprintf('k=%d, feas=%.2e \n', kk, feas);
+for kk=1:params.maxit
+  E = Omegac.*(X - Y + U);
+  [Y, ~, sthr] = prox_nuc(X - E + U, 1/mu);
+  Con = X - Y - E;
+  U = U + Con;
+  feas = infnorm(Con) / relthr;
+  obj = sum(sthr);
+
+  if params.prtlevel > 0
+    fprintf('k=%d, feas=%.2e, obj=%.2e \n', kk, feas, obj);
   end
-  if params.logLevel > 0
+  if params.loglevel > 0
     history.feas(kk) = feas;
+    history.obj(kk) = obj;
   end
-  if feas < params.convThr
+  if feas < params.tol
     history.status = 0;
     break
   end
-  mu = alpha*mu;
+
+  mu = params.alpha * mu;
 end
+
+% ensure constraint satisfied exactly
+Y(Omega) = X(Omega);
+
 history.iter = kk; history.rtime = toc(tstart);
+if params.loglevel <= 0
+  history.feas = feas;
+  history.obj = obj;
+end
 end
