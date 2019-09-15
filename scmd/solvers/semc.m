@@ -21,33 +21,40 @@ function [Y, history] = semc(X, Omega, C, eta)
 %   Returns:
 %     Y: D x N data completion
 %     history: struct containing the following information.
-%       rtime: total runtime in seconds.
-%       iter, status: always zero, included for consistency.
 %       rc: minimum reciprocal condition number of (I - C)^T_{\omega_i^c} over
 %         all rows i.
+%       iter, status, conv_cond: always zero, included for consistency.
+%       rtime: total runtime in seconds.
 tstart = tic;
 [D, N] = size(X);
 Omega = logical(Omega);
 Omegac = ~Omega;
+X(Omegac) = 0;
 C = full(C);
+
+if nargin < 4; eta = 0; end
 
 Y = X;
 ICT = (eye(N) - C)';
 history.rc = 1;
 for ii=1:D
   omegai = Omega(ii, :);
-  omegaic = Omegac(ii, :);
-  xi = X(ii, :)';
+  % if no observed entries, do nothing
+  if sum(omegai) > 0
+    omegaic = Omegac(ii, :);
+    xi = X(ii, :)';
 
-  A = ICT(:, omegaic);
-  b = - (ICT(:, omegai) * xi(omegai));
-  if eta > 0
-    Y(ii, omegaic) = (A' * A + eta * eye(size(A, 2))) \ (A' * b);
-  else
-    Y(ii, omegaic) = A \ b;
+    A = ICT(:, omegaic);
+    b = - (ICT(:, omegai) * xi(omegai));
+    if eta > 0
+      Y(ii, omegaic) = (A' * A + eta * eye(size(A, 2))) \ (A' * b);
+    else
+      Y(ii, omegaic) = A \ b;
+    end
+
+    history.rc = min(rcond(A), history.rc);
   end
-
-  history.rc = min(rcond(A), history.rc);
 end
-history.iter = 0; history.status = 0; history.rtime = toc(tstart);
+history.conv_cond = 0; history.iter = 0; history.status = 0;
+history.rtime = toc(tstart);
 end

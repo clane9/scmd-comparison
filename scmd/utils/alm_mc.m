@@ -4,7 +4,7 @@ function [Y, history] = alm_mc(X, Omega, Y0, params)
 %
 %   min_Y ||Y||_* s.t. X = Y + E, P_Omega(E) = 0
 %
-%   [Y, history] = alm_mc(X, Omega, params)
+%   [Y, history] = alm_mc(X, Omega, Y0, params)
 %
 %   Args:
 %     X: D x N incomplete data matrix
@@ -21,7 +21,12 @@ function [Y, history] = alm_mc(X, Omega, Y0, params)
 %
 %   Returns:
 %     Y: D x N low-rank completion.
-%     history: Struct containing diagnostic info.
+%     history: struct containing the following information
+%       feas: feasibility, per iteration if loglevel > 0.
+%       obj: objective, per iteration if loglevel > 0.
+%       iter, status, conv_cond: number of iterations, termination status,
+%         convergence condition at termination.
+%       rtime: total runtime in seconds
 %
 %   References:
 %     Lin, Z., Chen, M., & Ma, Y. (2010). The augmented lagrange multiplier
@@ -47,11 +52,7 @@ fields = {'mu', 'alpha', 'maxit', 'tol', 'prtlevel', 'loglevel'};
 defaults = {1/sum(sqrt( sum(X.^2, 1) )), 1.1, 500, 1e-5, 0, 0};
 params = set_default_params(params, fields, defaults);
 
-if ~isempty(Y0);
-  Y = Y0;
-else
-  Y = zeros(D, N);
-end
+if isempty(Y0); Y = X; else; Y = Y0; end
 U = zeros(D, N);
 
 mu = params.mu;
@@ -66,7 +67,7 @@ for kk=1:params.maxit
   obj = sum(sthr);
 
   if params.prtlevel > 0
-    fprintf('k=%d, feas=%.2e, obj=%.2e \n', kk, feas, obj);
+    fprintf('k=%d, obj=%.2e, feas=%.2e \n', kk, obj, feas);
   end
   if params.loglevel > 0
     history.feas(kk) = feas;
@@ -83,9 +84,9 @@ end
 % ensure constraint satisfied exactly
 Y(Omega) = X(Omega);
 
-history.iter = kk; history.rtime = toc(tstart);
 if params.loglevel <= 0
   history.feas = feas;
   history.obj = obj;
 end
+history.conv_cond = feas; history.iter = kk; history.rtime = toc(tstart);
 end
