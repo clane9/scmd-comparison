@@ -4,7 +4,7 @@ SCMD Comparison Code
 Code from original authors
 --------------------------
 
-Code from original authors stored unedited in `external/`. URLs are:
+Code from original authors stored unedited in `third_party/`. URLs are:
 
 - [S3LR](https://pan.baidu.com/s/1jJJlL7w) via [CG Li's
   homepage](http://www.pris.net.cn/en/cgli). Password to download is 6p6t. 
