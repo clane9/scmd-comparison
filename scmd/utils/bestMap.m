@@ -2,13 +2,15 @@ function [newL2] = bestMap(L1,L2)
 %bestmap: permute labels of L2 to match L1 as good as possible
 %   [newL2] = bestMap(L1,L2);
 %
+%   version 2.1 --Sep/2019
 %   version 2.0 --May/2007
 %   version 1.0 --November/2003
 %
 %   Written by Deng Cai (dengcai AT gmail.com)
+%   Modified by Connor Lane to handle case where nClass1 < nClass2
 
 
-%===========    
+%===========
 
 L1 = L1(:);
 L2 = L2(:);
@@ -32,5 +34,11 @@ end
 [c,t] = hungarian(-G);
 newL2 = zeros(size(L2));
 for i=1:nClass2
-    newL2(L2 == Label2(i)) = Label1(c(i));
+    % handle case where nClass1 < nClass2 by assigning distinct labels outside
+    % Label1.
+    if c(i) <= nClass1
+        newL2(L2 == Label2(i)) = Label1(c(i));
+    else
+        newL2(L2 == Label2(i)) = Label1(end) + c(i) - nClass1;
+    end
 end

@@ -18,6 +18,8 @@ function Z = tsc(X, q)
 % normalize and take dot products
 X = X ./ repmat(sqrt(sum(X.^2))+eps, [D 1]);
 G = abs(X'*X);
+% set diag = 0
+G(1:N+1:end) = 0;
 
 % construct weighted q-nn affinity
 [topqG, topqI] = maxk(G, q);

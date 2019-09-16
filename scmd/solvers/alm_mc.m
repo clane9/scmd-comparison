@@ -13,6 +13,7 @@ function [Y, history] = alm_mc(X, Omega, Y0, params)
 %     params: Struct containing problem parameters
 %       mu: ALM penalty parameter [default: 1/||X||_{2,1}]
 %       alpha: rate for increasing mu after each iteration [default: 1.1]
+%       mu_max: maximum mu [default: 1e4]
 %       maxit: maximum iterations [default: 500]
 %       tol: stopping tolerance [default: 1e-5]
 %       prtlevel: 1=basic per-iteration output [default: 0]
@@ -22,8 +23,7 @@ function [Y, history] = alm_mc(X, Omega, Y0, params)
 %   Returns:
 %     Y: D x N low-rank completion.
 %     history: struct containing the following information
-%       feas: feasibility, per iteration if loglevel > 0.
-%       obj: objective, per iteration if loglevel > 0.
+%       obj, feas, rnk: objective, feasibility, rank; per iteration if loglevel > 0.
 %       iter, status, conv_cond: number of iterations, termination status,
 %         convergence condition at termination.
 %       rtime: total runtime in seconds
@@ -42,20 +42,19 @@ Omega = logical(Omega);
 Omegac = ~Omega;
 X(Omegac) = 0;
 
-if nargin < 3
-  params = struct;
-end
-% set defaults
-% see page 6 in (Chen et al., 2011) for mu/alpha default justification
-% https://pdfs.semanticscholar.org/1556/6adc0e6312b72290c31f891bdb080c06d997.pdf
-fields = {'mu', 'alpha', 'maxit', 'tol', 'prtlevel', 'loglevel'};
-defaults = {1/sum(sqrt( sum(X.^2, 1) )), 1.1, 500, 1e-5, 0, 0};
+if nargin < 4; params = struct; end
+fields = {'mu', 'alpha', 'mu_max', 'maxit', 'tol', 'prtlevel', 'loglevel'};
+defaults = {NaN, 1.1, 1e4, 500, 1e-5, 0, 0};
 params = set_default_params(params, fields, defaults);
 
 if isempty(Y0); Y = X; else; Y = Y0; end
 U = zeros(D, N);
 
-mu = params.mu;
+% set default 1/mu = 0.2 || Y ||_2 to get some reasonable but not excessive
+% singular value thresholding. if too strong, then get no benefit of warm
+% start.
+if isnan(params.mu); mu = 1/(0.2 * norm(Y)); else; mu = params.mu; end
+
 relthr = max(infnorm(X(Omega)), 1e-3);
 history.status = 1;
 for kk=1:params.maxit
@@ -65,20 +64,22 @@ for kk=1:params.maxit
   U = U + Con;
   feas = infnorm(Con) / relthr;
   obj = sum(sthr);
+  rnk = sum(sthr > 1e-3*sthr(1));
 
   if params.prtlevel > 0
-    fprintf('k=%d, obj=%.2e, feas=%.2e \n', kk, obj, feas);
+    fprintf('k=%d, mu=%.2e, obj=%.2e, rnk=%d, feas=%.2e \n', kk, mu, obj, rnk, feas);
   end
   if params.loglevel > 0
     history.feas(kk) = feas;
     history.obj(kk) = obj;
+    history.rnk(kk) = rnk;
   end
   if feas < params.tol
     history.status = 0;
     break
   end
 
-  mu = params.alpha * mu;
+  mu = min(params.mu_max, params.alpha * mu);
 end
 
 % ensure constraint satisfied exactly
@@ -87,6 +88,7 @@ Y(Omega) = X(Omega);
 if params.loglevel <= 0
   history.feas = feas;
   history.obj = obj;
+  history.rnk = rnk;
 end
 history.conv_cond = feas; history.iter = kk; history.rtime = toc(tstart);
 end

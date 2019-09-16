@@ -18,12 +18,13 @@ function [groups, Y, history] = s3lr(X, Omega, n, params)
 %     X, Omega: D x N data matrix and observed entry mask
 %     n: number of clusters
 %     params: struct containing the following problem parameters.
-%       Y0, C0: initial completion, self-expression.
+%       init: initialization method ('zf', 'lrmc', 'ladmc', 'pzf-ensc+lrmc')
+%         [default: 'zf']
 %       gamma: structured sparse self-expressive penalty [default: 0.02]
 %       alpha: structured sparse tradeoff parameter [default: 1]
 %       lambda: sparse corruption penalty [default: 20]
 %       ladmm_maxit, ladmm_tol: LADMM sub-problem max iters and stopping
-%         tolerance [default: 1e6, 1e-5]
+%         tolerance [default: 1e4, 1e-5]
 %       ladmm_mu, ladmm_rho, ladmm_mu_max: ADMM penalty parameter, increasing
 %         rate, max value [default: (1.25 / || X ||_2), 1.1, 1e4]
 %       maxit: maximum outer iterations [default: 50]
@@ -33,31 +34,49 @@ function [groups, Y, history] = s3lr(X, Omega, n, params)
 %     groups: N x 1 cluster assignment
 %     Y: D x N data completion
 %     history: struct containing the following information
+%       init_history: history from initialization
 %       iter, status, conv_cond: number of iterations, termination status,
 %         convergence condition at termination.
 %       rtime: total runtime in seconds
 tstart = tic;
-[~, N] = size(X);
+[D, N] = size(X);
 Omega = logical(Omega);
 Omegac = ~Omega;
 X(Omegac) = 0;
 
-if nargin < 4
-  params = struct;
-end
+if nargin < 4; params = struct; end
 fields = {'init', 'gamma', 'alpha', 'lambda', 'ladmm_maxit', 'ladmm_tol', ...
     'ladmm_mu', 'ladmm_rho', 'ladmm_mu_max', 'maxit', 'tol', ...
     'prtlevel', 'loglevel'};
-defaults = {'zf', 0.02, 1, 20, 1e6, 1e-5, NaN, 1.1, 1e4, 50, 0, 1};
+defaults = {'zf', 0.02, 1, 20, 1e4, 1e-5, NaN, 1.1, 1e4, 50, 1e-5, 0, 1};
 params = set_default_params(params, fields, defaults);
 % use of normest follows Li, although I don't think much time is saved vs
 % just norm(X).
 if isnan(params.ladmm_mu); params.ladmm_mu = 1.25 / normest(X, 0.1); end
 
 % initialize C, Y, Theta, E
-if isempty(params.C0); C = zeros(N); else; C = params.C0; end
-if isempty(params.Y0); Y = X; else; Y = params.Y0; end
-[Theta, E] = deal(zeros(N));
+if any(strcmpi(params.init, {'lrmc', 'ladmc'}))
+  init_params = struct('maxit', 500, 'tol', 1e-5, 'prtlevel', ...
+    params.prtlevel-1, 'loglevel', params.loglevel-1);
+  if strcmpi(params.init, 'lrmc')
+    [Y, history.init_history] = alm_mc(X, Omega, [], init_params);
+  else
+    [Y, history.init_history] = ladmc(X, Omega, [], init_params);
+  end
+  C = zeros(N);
+elseif strcmpi(params.init, 'pzf-ensc+lrmc')
+  init_params = struct('init', 'zf', 'sc_method', 'ensc', 'ensc_pzf', 1, ...
+      'mc_method', 'lrmc', 'maxit', 1, 'prtlevel', params.prtlevel-1, ...
+      'loglevel', 1);
+  [~, Y, history.init_history] = alt_sc_mc(X, Omega, n, init_params);
+  C = history.init_history.C;
+else
+  Y = X;
+  C = zeros(N);
+  history.init_history = struct;
+end
+Theta = zeros(N);
+E = zeros(D, N);
 
 % set fixed ladmm parameters
 tau = Inf;
@@ -138,7 +157,7 @@ function Theta = flip_co_occur(groups)
 % flip_co_occur    compute flipped co-occurrence matrix Theta from groups.
 groups = reshape(groups, [], 1);
 N = size(groups, 1);
-Theta = repmat(groups, [1 N]) ~= repmat(groups, [N 1]);
+Theta = repmat(groups, [1 N]) ~= repmat(groups', [N 1]);
 end
 
 

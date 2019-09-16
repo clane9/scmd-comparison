@@ -28,6 +28,7 @@ function [C, history] = weight_ensc_spams(X, W, params)
 tstart = tic;
 [D, N] = size(X);
 
+if nargin < 3; params = struct; end
 fields = {'lambda0', 'gamma', 'lambda_method', 'normalize'};
 defaults = {20, 0.9, 'fixed', 1};
 params = set_default_params(params, fields, defaults);

@@ -23,9 +23,9 @@ if normalize
   % normalize each column to have max entry 1.
   absC = absC ./ repmat(max(absC) + eps, [N 1]);
 end
-if thresh
+if thresh && ~issparse(absC)
   % threshold small values and convert to sparse matrix.
-  absC(absC < 1e-8) = 0; absC = sparse(absC);
+  absC(absC < 1e-8*max(absC(:))) = 0; absC = sparse(absC);
 end
 A = absC + absC';
 end

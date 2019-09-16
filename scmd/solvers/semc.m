@@ -21,8 +21,6 @@ function [Y, history] = semc(X, Omega, C, eta)
 %   Returns:
 %     Y: D x N data completion
 %     history: struct containing the following information.
-%       rc: minimum reciprocal condition number of (I - C)^T_{\omega_i^c} over
-%         all rows i.
 %       iter, status, conv_cond: always zero, included for consistency.
 %       rtime: total runtime in seconds.
 tstart = tic;
@@ -36,7 +34,6 @@ if nargin < 4; eta = 0; end
 
 Y = X;
 ICT = (eye(N) - C)';
-history.rc = 1;
 for ii=1:D
   omegai = Omega(ii, :);
   % if no observed entries, do nothing
@@ -51,8 +48,6 @@ for ii=1:D
     else
       Y(ii, omegaic) = A \ b;
     end
-
-    history.rc = min(rcond(A), history.rc);
   end
 end
 history.conv_cond = 0; history.iter = 0; history.status = 0;

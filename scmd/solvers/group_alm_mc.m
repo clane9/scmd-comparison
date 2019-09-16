@@ -47,7 +47,7 @@ for ii=1:n
   history.rtime(ii) = grp_history.rtime;
 end
 
-if params.loglevel <= 0
+if params.loglevel < 0
   history.iter = max(history.iter);
   history.status = max(history.status);
   history.conv_cond = max(history.conv_cond);

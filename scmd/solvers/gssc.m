@@ -6,7 +6,7 @@ function [groups, Y, history] = gssc(X, Omega, n, r, params)
 %              + lambda \sum_{j,k=1}^{N,n} || v_{j k} ||_2
 %              + \Theta( U )
 %
-%   where v_{j k} in R^r and 
+%   where v_{j k} in R^r and
 %
 %   \Theta_{GSSC}(U) = \delta_{|| U ||_F <= 1}(U)
 %   \Theta_{LR-GSSC}(U) = gamma || U ||_{2,1}
@@ -19,11 +19,13 @@ function [groups, Y, history] = gssc(X, Omega, n, r, params)
 %     n: number of clusters
 %     r: subspace dimension
 %     params: struct containing the following problem parameters.
+%       init: initialization method ('random', 'pzf-ensc+lrmc') [default:
+%         pzf-ensc+lrmc]
 %       squared: use Frobenius squared vs unsquared loss. D.P.A's paper says
 %         squared, but code uses unsquared. problems are equivalent up to
 %         choice of lambda [default: 0].
 %       lr_mode: solve LR-GSSC formulation [default: 0].
-%       lrmc_final: compute final completion by group-wise LRMC [default: 1].
+%       lrmc_final: compute final completion by group-wise LRMC [default: 0].
 %       lambda: group sparse V penalty parameter [default: 1e-3].
 %       gamma: column sparse U penalty parameter for LR-GSSC [default: 1e-3].
 %       maxit: maximum iterations [default: 100]
@@ -34,9 +36,10 @@ function [groups, Y, history] = gssc(X, Omega, n, r, params)
 %     groups: N x 1 cluster assignment
 %     Y: D x N data completion
 %     history: struct containing the following information
-%       init_history: history from pzf-ensc+lrmc initialization.
+%       U, V: final iterates, if loglevel > 0.
 %       obj, obj_update, U_update: either per iteration or at termination.
-%       mc_history: history from group lrmc completion.
+%       init_history: history from initialization
+%       mc_history: history from final group lrmc completion.
 %       iter, status, conv_cond: number of iterations, termination status,
 %         convergence condition at termination.
 %       rtime: total runtime in seconds
@@ -46,45 +49,49 @@ Omega = logical(Omega);
 Omegac = ~Omega;
 X(Omegac) = 0;
 
-if nargin < 5
-  params = struct;
-end
-fields = {'squared', 'lr_mode', 'lrmc_final', 'lambda', 'gamma', ...
-    'maxit', 'tol', 'prtlevel', 'loglevel'};
-defaults = {0, 0, 1, 1e-3, 1e-3, 100, 1e-3, 0, 1};
+if nargin < 5; params = struct; end
+fields = {'init', 'squared', 'lr_mode', 'lrmc_final', 'lambda', ...
+    'gamma', 'maxit', 'tol', 'prtlevel', 'loglevel'};
+defaults = {'pzf-ensc+lrmc', 0, 0, 0, 1e-3, 1e-3, 100, 1e-3, 0, 1};
 params = set_default_params(params, fields, defaults);
 
-% initialize U by first finding clustering and completion with pzf-ssc+lrmc.
-% then for each group i initialize U_i by svd.
-init_params = struct('init', 'zf', 'pzf', 1, 'maxit', 1, 'mc_method', ...
-    'lrmc', 'lrmc_maxit', 500, 'lrmc_tol', 1e-5, 'prtlevel', 0, ...
-    'loglevel', 0);
-[groups, Y, history.init_history] = alt_ensc_mc(X, Omega, n, init_params);
-% any unused columns will be initialized randomly
+% if Y0, groups0 both provided, initialize U_i by svd. otherwise initialize
+% randomly.
 U = (1/sqrt(D)) * randn(D, r*n);
-for ii=1:n
-  maski = groups == ii;
-  ri = min(sum(maski), r);
-  if ri > 0
-    startidx = r*(ii-1) + 1;
-    [U(:, startidx:(startidx+ri)), ~, ~] = svds(Y(:, maski), ri);
+if strcmpi(params.init, 'pzf-ensc+lrmc')
+  init_params = struct('init', 'zf', 'sc_method', 'ensc', 'ensc_pzf', 1, ...
+      'mc_method', 'lrmc', 'maxit', 1, 'prtlevel', params.prtlevel-1, ...
+      'loglevel', params.loglevel-1);
+  [groups, Y, history.init_history] = alt_sc_mc(X, Omega, n, init_params);
+  for ii=1:n
+    maski = groups == ii;
+    % we initialize randomly and then overwrite to ensure unused columns are
+    % non-zero.
+    ri = min(sum(maski), r);
+    if ri > 0
+      startidx = r*(ii-1) + 1;
+      [U(:, startidx:(startidx+ri-1)), ~, ~] = svds(Y(:, maski), ri);
+    end
   end
 end
 U = (1/norm(U, 'fro')) * U;
+V = gssc_Vmin(X, Omega, U, n, r, params.squared, params.lambda);
 
-objprev = Inf;
-Uprev = U;
+obj = gssc_objective(X, Omega, U, V, n, r, params.squared, params.lr_mode, ...
+    params.lambda, params.gamma);
 history.status = 1;
 for kk=1:params.maxit
-  V = gssc_Vmin(X, Omega, U, n, r, params.squared, params.lambda);
+  objprev = obj;
+  Uprev = U;
+
   U = gssc_Umin(X, Omega, V, n, r, params.squared, params.lr_mode, ...
       params.gamma);
+  V = gssc_Vmin(X, Omega, U, n, r, params.squared, params.lambda);
   obj = gssc_objective(X, Omega, U, V, n, r, params.squared, params.lr_mode, ...
       params.lambda, params.gamma);
 
   obj_update = objprev - obj;
   U_update = infnorm(Uprev - U) / max(infnorm(U), 1e-3);
-  objprev = obj;
 
   if params.prtlevel > 0
     fprintf('k=%d, obj=%.2e, obj_updt=%.2e, U_updt=%.2e \n', kk, obj, ...
@@ -114,7 +121,10 @@ else
   history.mc_history = struct;
 end
 
-if params.loglevel <= 0
+if params.loglevel > 0
+  history.U = U; history.V = V;
+else
+  history.U = []; history.V = [];
   history.obj = obj;
   history.obj_update = obj_update;
   history.U_update = U_update;
@@ -148,7 +158,7 @@ variable V(N,n*r);
 % squared and un-squared forms share the same solution path, but solutions for
 % particular lambda will be different.
 if squared
-  func = sum_square(Omega.*(U*V'-X));
+  func = sum(sum_square(Omega.*(U*V'-X)));
 else
   func = norm(Omega.*(U*V'-X),'fro');
 end
@@ -165,7 +175,7 @@ cvx_begin quiet
 cvx_precision low
 variable U(D,n*r);
 if squared
-  func = sum_square(Omega.*(U*V'-X));
+  func = sum(sum_square(Omega.*(U*V'-X)));
 else
   func = norm(Omega.*(U*V'-X),'fro');
 end

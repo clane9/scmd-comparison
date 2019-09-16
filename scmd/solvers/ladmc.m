@@ -42,10 +42,7 @@ Omega = logical(Omega);
 Omegac = ~Omega;
 X(Omegac) = 0;
 
-if nargin < 3
-  params = struct;
-end
-
+if nargin < 4; params = struct; end
 if isempty(Y0); Y0 = X; end
 
 % tensorize by taking outer product of each column and do lrmc
@@ -62,8 +59,8 @@ for jj=1:N
   yy = reshape(YY(:, jj), [D D]);
   [U, S, ~] = svds(yy, 2);
   s = diag(S);
-  Y(:, jj) = sqrt(s(1)) * U(:, jj);
-  history.max_sv2 = max(history.max_sv2, s(2));
+  Y(:, jj) = sqrt(s(1)) * U(:, 1);
+  history.max_sv2 = max(history.max_sv2, s(2)/s(1));
 end
 
 % ensure constraint satisfied exactly
