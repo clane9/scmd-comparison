@@ -18,35 +18,27 @@ function [x, history] = apg(x0, ffun, rfun, params)
 %       maxit: Maximum iterations [default: 500].
 %       tol: Stopping tolerance [default: 1e-6].
 %       prtlevel: 1=basic per-iteration output [default: 0].
-%       loglevel: 1=basic summary info, 2=detailed per-iteration info
-%         [default: 1]
+%       loglevel: 0=basic summary info, 1=detailed per-iteration info
+%         [default: 0]
 %
 %   Returns:
 %     x: final iterate.
 %     history: Struct containing containing fields:
-%       iter: Total iterations.
-%       status: 0 if stopping tolerance achieved, 1 otherwise.
-%       tol: Final stopping tolerance.
-%       obj, f, r: objective, f value, r value (per-iteration).
-%       update: Relative inf norm change in iterates (per-iteration).
-%       alpha: Minimum step size (per-iteration).
-
-if nargin < 4
-  params = struct;
-end
+%       obj, f, r: objective, f value, r value, per iteration if loglevel > 0
+%       update: Relative inf norm change in iterates
+%       alpha: Minimum step size
+%       iter, status, conv_cond: number of iterations, termination status,
+%         convergence condition at termination.
+%       rtime: total runtime in seconds
+tstart = tic;
+if nargin < 4; params = struct; end
 fields = {'accel', 'maxit', 'tol', 'prtlevel', 'loglevel'};
 defaults = {true, 500, 1e-6, 0, 1};
-for i=1:length(fields)
-  params = setdefaultfield(params, fields{i}, defaults{i});
-end
+params = set_default_params(params, fields, defaults);
 
 % If f, r functions are strings, convert to function handles.
-if ischar(ffun)
-  ffun = str2func(ffun);
-end
-if ischar(rfun)
-  rfun = str2func(rfun);
-end
+if ischar(ffun); ffun = str2func(ffun); end
+if ischar(rfun); rfun = str2func(rfun); end
 
 % Initialize step size, iterates
 alpha = 1; alphamin = 1e-8; alphamax = 1e4; eta = 0.5;
@@ -54,8 +46,8 @@ x = x0; xprev = x0;
 minupdate = inf;
 
 % Print form str.
-printformstr = ['k=%d \t update=%.2e \t obj=%.2e \t f=%.2e \t r=%.2e \t alpha=%.2e \t '...
-    'obj_dec=%.2e \t suff_dec=%d \n'];
+printformstr = ['k=%d \t update=%.2e \t obj=%.2e \t f=%.2e \t r=%.2e \t ' ...
+    'alpha=%.2e \t obj_dec=%.2e \t suff_dec=%d \n'];
 
 % Accelerated proximal gradient loop.
 status = 1; iter = 0;
@@ -104,7 +96,7 @@ while iter <= params.maxit
         suff_dec);
   end
 
-  if params.loglevel > 1
+  if params.loglevel > 0
     history.obj(iter) = obj;
     history.f(iter) = f;
     history.r(iter) = r;
@@ -118,5 +110,35 @@ while iter <= params.maxit
     break
   end
 end
-history.iter = iter; history.status = status; history.tol = update;
+
+if params.loglevel <= 0
+  history.obj = obj;
+  history.f = f;
+  history.r = r;
+  history.update = update;
+  history.alpha = alpha;
+end
+
+history.iter = iter; history.status = status; history.conv_cond = update;
+history.rtime = toc(tstart);
+end
+
+
+function [params] = set_default_params(params, fields, defaults)
+for ii=1:length(fields)
+  if ~isfield(params, fields{ii})
+    params.(fields{ii}) = defaults{ii};
+  end
+end
+end
+
+
+function a = fronormsqrd(X)
+a = sum(X(:).^2);
+end
+
+
+function a = frodot(X, Y)
+D = X.*Y;
+a = sum(D(:));
 end
