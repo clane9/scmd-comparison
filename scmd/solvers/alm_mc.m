@@ -42,6 +42,21 @@ Omega = logical(Omega);
 Omegac = ~Omega;
 X(Omegac) = 0;
 
+% handle edge cases Omega empty, Omega complete
+if ~any(Omega(:))
+  warning('WARNING: no observed entries given.')
+  Y = zeros(D, N);
+  history = struct('obj', 0, 'feas', 0, 'rnk', 0, 'iter', 0, 'status', 0, ...
+      'conv_cond', 0, 'rtime', toc(tstart));
+  return
+elseif all(Omega(:))
+  Y = X;
+  s = svd(X); obj = sum(s); rnk = sum(s > 1e-3*s(1));
+  history = struct('obj', obj, 'feas', 0, 'rnk', rnk, 'iter', 0, 'status', 0, ...
+      'conv_cond', 0, 'rtime', toc(tstart));
+  return
+end
+
 if nargin < 4; params = struct; end
 fields = {'mu', 'alpha', 'mu_max', 'maxit', 'tol', 'prtlevel', 'loglevel'};
 defaults = {NaN, 1.1, 1e4, 500, 1e-5, 0, 0};

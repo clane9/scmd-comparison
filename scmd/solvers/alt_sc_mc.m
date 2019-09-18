@@ -50,6 +50,11 @@ Omega = logical(Omega);
 Omegac = ~Omega;
 X(Omegac) = 0;
 
+if ~any(Omega(:))
+  error('ERROR: no observed entries given.')
+end
+iscomplete = all(Omega(:));
+
 % parse params and minimal checking
 if nargin < 4; params = struct; end
 fields = {'init', 'sc_method', 'ensc_pzf', 'ensc_lambda0', 'ensc_gamma', ...
@@ -98,7 +103,7 @@ end
 
 if params.ensc_pzf; W = Omega; else; W = []; end
 
-groups = []; C = sparse(N, N);
+groups = ones(N, 1); C = sparse(N, N);
 relthr = max(infnorm(X(Omega)), 1e-3);
 history.status = 1;
 kk = 0;
@@ -118,12 +123,8 @@ while kk < params.maxit
     A = build_affinity(C);
   end
   groups = SpectralClustering(A, n, 'Eig_Solver', 'eigs');
-  if ~isempty(groups_prev)
-    % use hungarian algorithm to measure change in clustering.
-    groups_update = 1 - evalAccuracy(groups_prev, groups);
-  else
-    groups_update = 1;
-  end
+  % use hungarian algorithm to measure change in clustering.
+  groups_update = 1 - evalAccuracy(groups_prev, groups);
   C_update = full(infnorm(C - C_prev) / relthr);
 
   % matrix completion
@@ -131,6 +132,9 @@ while kk < params.maxit
     % skip final completion for non-integer maxit. needed for algorithms
     % (LRMC|LADMC)+(EnSC|TSC).
     Y_update = NaN;
+    history.mc_history{kk} = struct;
+  elseif iscomplete
+    Y = X; Y_update = 0;
     history.mc_history{kk} = struct;
   else
     Yunobs_prev = Y(Omegac);

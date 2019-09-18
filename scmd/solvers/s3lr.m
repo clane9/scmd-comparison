@@ -24,7 +24,7 @@ function [groups, Y, history] = s3lr(X, Omega, n, params)
 %       alpha: structured sparse tradeoff parameter [default: 1]
 %       lambda: sparse corruption penalty [default: 20]
 %       ladmm_maxit, ladmm_tol: LADMM sub-problem max iters and stopping
-%         tolerance [default: 1e4, 1e-5]
+%         tolerance [default: 500, 1e-5]
 %       ladmm_mu, ladmm_rho, ladmm_mu_max: ADMM penalty parameter, increasing
 %         rate, max value [default: (1.25 / || X ||_2), 1.1, 1e4]
 %       maxit: maximum outer iterations [default: 50]
@@ -44,11 +44,15 @@ Omega = logical(Omega);
 Omegac = ~Omega;
 X(Omegac) = 0;
 
+if ~any(Omega(:))
+  error('ERROR: no observed entries given.')
+end
+
 if nargin < 4; params = struct; end
 fields = {'init', 'gamma', 'alpha', 'lambda', 'ladmm_maxit', 'ladmm_tol', ...
     'ladmm_mu', 'ladmm_rho', 'ladmm_mu_max', 'maxit', 'tol', ...
     'prtlevel', 'loglevel'};
-defaults = {'zf', 0.02, 1, 20, 1e4, 1e-5, NaN, 1.1, 1e4, 50, 1e-5, 0, 1};
+defaults = {'zf', 0.02, 1, 20, 500, 1e-5, NaN, 1.1, 1e4, 50, 1e-5, 0, 0};
 params = set_default_params(params, fields, defaults);
 % use of normest follows Li, although I don't think much time is saved vs
 % just norm(X).
@@ -57,7 +61,7 @@ if isnan(params.ladmm_mu); params.ladmm_mu = 1.25 / normest(X, 0.1); end
 % initialize C, Y, Theta, E
 if any(strcmpi(params.init, {'lrmc', 'ladmc'}))
   init_params = struct('maxit', 500, 'tol', 1e-5, 'prtlevel', ...
-    params.prtlevel-1, 'loglevel', params.loglevel-1);
+      params.prtlevel-1, 'loglevel', params.loglevel-1);
   if strcmpi(params.init, 'lrmc')
     [Y, history.init_history] = alm_mc(X, Omega, [], init_params);
   else
@@ -137,8 +141,12 @@ for kk=1:params.maxit
   end
 end
 
-history.C = C;
-history.E = E;
+if params.loglevel > 0
+  history.C = C;
+  history.E = E;
+else
+  [history.C, history.E] = deal([]);
+end
 
 if params.loglevel <= 0
   history.obj = s3lr_objective(C, Y, E, Theta, groups, params.lambda, ...

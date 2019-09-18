@@ -20,8 +20,8 @@ function [Y, history] = group_alm_mc(X, Omega, groups, Y0, params)
 %   Returns:
 %     Y: D x N low-rank completion.
 %     history: struct containing the following information per group.
-%       feas: feasibility, per group, iteration if loglevel > 0.
-%       obj: objective, per group, iteration if loglevel > 0.
+%       obj, feas, rnk: objective, feasibility, rank; per group if loglevel >=
+%         0, per iteration if loglevel > 0.
 %       iter, status, conv_cond: number of iterations, termination status,
 %         convergence condition at termination. per group if loglevel > 0.
 %       rtime: total runtime in seconds, per group if loglevel > 0.
@@ -40,9 +40,11 @@ for ii=1:n
   if params.loglevel > 0
     history.obj{ii} = grp_history.obj;
     history.feas{ii} = grp_history.feas;
+    history.rnk{ii} = grp_history.rnk;
   else
     history.obj(ii) = grp_history.obj;
     history.feas(ii) = grp_history.feas;
+    history.rnk(ii) = grp_history.rnk;
   end
   history.rtime(ii) = grp_history.rtime;
 end
@@ -53,6 +55,7 @@ if params.loglevel < 0
   history.conv_cond = max(history.conv_cond);
   history.obj = sum(history.obj);
   history.feas = max(history.feas);
+  history.rnk = sum(history.rnk);
   history.rtime = sum(history.rtime);
 end
 end

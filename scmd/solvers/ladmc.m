@@ -19,8 +19,7 @@ function [Y, history] = ladmc(X, Omega, Y0, params)
 %   Returns:
 %     Y: D x N low-rank completion.
 %     history: struct containing the following information
-%       feas: LRMC feasibility, per iteration if loglevel > 0.
-%       obj: LRMC objective, per iteration if loglevel > 0.
+%       obj, feas, rnk: objective, feasibility, rank; per iteration if loglevel > 0.
 %       max_sv2: maximum 2nd singular value over all completed tensorized data
 %         points. should be small if completion is correct.
 %       iter, status, conv_cond: number of iterations, termination status,
@@ -60,7 +59,7 @@ for jj=1:N
   [U, S, ~] = svds(yy, 2);
   s = diag(S);
   Y(:, jj) = sqrt(s(1)) * U(:, 1);
-  history.max_sv2 = max(history.max_sv2, s(2)/s(1));
+  history.max_sv2 = max(history.max_sv2, s(2)/(s(1)+eps));
 end
 
 % ensure constraint satisfied exactly

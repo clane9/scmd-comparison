@@ -1,4 +1,4 @@
-function [groups, Y, history] = gssc(X, Omega, n, r, params)
+function [groups, Y, history] = gssc(X, Omega, n, params)
 % gssc    Run (LR-)GSSC for joint subspace clustering and completion. All
 %   substance of GSSC algorithm from D. Pimentel. Solves the formulation
 %
@@ -11,7 +11,7 @@ function [groups, Y, history] = gssc(X, Omega, n, r, params)
 %   \Theta_{GSSC}(U) = \delta_{|| U ||_F <= 1}(U)
 %   \Theta_{LR-GSSC}(U) = gamma || U ||_{2,1}
 %
-%   [groups, Y, history] = gssc(X, Omega, n, r, params)
+%   [groups, Y, history] = gssc(X, Omega, n, params)
 %
 %   Args:
 %     X: D x N incomplete data matrix
@@ -19,6 +19,7 @@ function [groups, Y, history] = gssc(X, Omega, n, r, params)
 %     n: number of clusters
 %     r: subspace dimension
 %     params: struct containing the following problem parameters.
+%       r: subspace dimension (required)
 %       init: initialization method ('random', 'pzf-ensc+lrmc') [default:
 %         pzf-ensc+lrmc]
 %       squared: use Frobenius squared vs unsquared loss. D.P.A's paper says
@@ -49,11 +50,17 @@ Omega = logical(Omega);
 Omegac = ~Omega;
 X(Omegac) = 0;
 
-if nargin < 5; params = struct; end
-fields = {'init', 'squared', 'lr_mode', 'lrmc_final', 'lambda', ...
+if ~any(Omega(:))
+  error('ERROR: no observed entries given.')
+end
+
+if nargin < 4; params = struct; end
+fields = {'r', 'init', 'squared', 'lr_mode', 'lrmc_final', 'lambda', ...
     'gamma', 'maxit', 'tol', 'prtlevel', 'loglevel'};
-defaults = {'pzf-ensc+lrmc', 0, 0, 0, 1e-3, 1e-3, 100, 1e-3, 0, 1};
+defaults = {NaN, 'pzf-ensc+lrmc', 0, 0, 0, 1e-3, 1e-3, 100, 1e-3, 0, 1};
 params = set_default_params(params, fields, defaults);
+if isnan(params.r); error('ERROR: subspace dimension r is required.'); end
+r = params.r;
 
 % if Y0, groups0 both provided, initialize U_i by svd. otherwise initialize
 % randomly.
