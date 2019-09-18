@@ -11,8 +11,8 @@ function [X, groups, Omega] = generate_scmd_data(n, d, D, Ng, sigma, ell, seed)
 %
 %   where the U_i are random orthonormal bases of dimension D x d, V_i are
 %   random d x Ng coefficients sampled from N(0, 1/d), and E is D x Ng*n dense
-%   Gaussian noise sampled from N(0, sigma^2/D). Observed entries are sampled
-%   uniformly at random at a rate ell/D.
+%   Gaussian noise sampled from N(0, sigma^2/D). ell observed entries are
+%   sampled uniformly at random from every column.
 %
 %   Args:
 %     n: number of subspaces
@@ -20,17 +20,17 @@ function [X, groups, Omega] = generate_scmd_data(n, d, D, Ng, sigma, ell, seed)
 %     D: ambient dimension
 %     Ng: number of points per group
 %     sigma: dense noise sigma
-%     ell: expected number of observed entries per column
+%     ell: number of observed entries per column
 %     seed: seed for random generator [default: none]
 %
 %   Returns:
 %     X: D x (Ng*n) complete, noisy data matrix
 %     groups: (Ng*n) x 1 cluster assignment
-%     Omega: D x (Ng*n) logical indicator matrix of observed entries, so that the
-%       observed data Xobs = X.*Omega.
+%     Omega: D x (Ng*n) logical indicator matrix of observed entries, so that
+%       the observed data Xobs = X.*Omega.
 if nargin >= 7; rng(seed); end
 
-if n <= 0 || d <= 0 || d > D || D <= 0
+if min([n d D Ng ell]) <= 0 || sigma < 0 || d > D
   error('ERROR: invalid synthetic setting.')
 end
 
@@ -52,6 +52,12 @@ if sigma > 0
 end
 
 % sample ell observed entries per column (in expectation) uniformly at random
-if ell < D && ell > 0; obs_rate = ell/D; else; obs_rate = 1; end
-Omega = rand(D, N) <= obs_rate;
+if ell >= D
+  Omega = true(D, N);
+else
+  Omega = false(D, N);
+  for jj=1:N
+    Omega(randsample(D, ell), jj) = true;
+  end
+end
 end
