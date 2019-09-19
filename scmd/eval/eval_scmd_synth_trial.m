@@ -5,8 +5,8 @@ function [cluster_err, comp_err, summary, history] = eval_scmd_synth_trial(...
 %   [cluster_err, comp_err, history] = eval_scmd_synth_trial(n, ...
 %       d, D, Ng, sigma, ell, seed, method_name, solver, params, opts)
 if nargin < 11; opts = struct; end
-fields = {'paridx', 'out_summary'};
-defaults = {0, ''};
+fields = {'paridx', 'out_summary', 'quiet'};
+defaults = {0, '', 0};
 opts = set_default_params(opts, fields, defaults);
 
 history.args = {n, d, D, Ng, sigma, ell, seed, ...
@@ -14,20 +14,24 @@ history.args = {n, d, D, Ng, sigma, ell, seed, ...
 
 try
   [X, groups_true, Omega] = generate_scmd_data(n, d, D, Ng, sigma, ell, seed);
-  
+
   Omegac = ~Omega;
   Xunobs = X(Omegac);
   Xunobs_norm = norm(Xunobs);
-  
+
   if ischar(solver); solver = str2func(solver); end
   [groups, Y, solver_history] = solver(X, Omega, n, params);
   cluster_err = 1-evalAccuracy(groups_true, groups);
   comp_err = norm(Y(Omegac) - Xunobs) / (Xunobs_norm+eps);
 catch ME
-  [cluster_err, comp_err] = deal(NaN);
-  [solver_history.iter, solver_history.status] = deal(NaN);
-  [solver_history.conv_cond, solver_history.rtime] = deal(NaN);
-  history.ME = ME;
+  if ~opts.quiet
+    rethrow(ME)
+  else
+    [cluster_err, comp_err] = deal(NaN);
+    [solver_history.iter, solver_history.status] = deal(NaN);
+    [solver_history.conv_cond, solver_history.rtime] = deal(NaN);
+    history.ME = ME;
+  end
 end
 
 history.solver_history = solver_history;

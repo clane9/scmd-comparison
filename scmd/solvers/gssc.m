@@ -17,21 +17,21 @@ function [groups, Y, history] = gssc(X, Omega, n, params)
 %     X: D x N incomplete data matrix
 %     Omega: D x N logical indicator of observed entries
 %     n: number of clusters
-%     r: subspace dimension
 %     params: struct containing the following problem parameters.
 %       r: subspace dimension (required)
 %       init: initialization method ('random', 'pzf-ensc+lrmc') [default:
 %         pzf-ensc+lrmc]
+%       optim: optimization method ('cvx', 'apg') [default: 'apg']
 %       squared: use Frobenius squared vs unsquared loss. D.P.A's paper says
 %         squared, but code uses unsquared. problems are equivalent up to
-%         choice of lambda [default: 0].
+%         choice of lambda [default: 1].
 %       lr_mode: solve LR-GSSC formulation [default: 0].
 %       lrmc_final: compute final completion by group-wise LRMC [default: 0].
 %       lambda: group sparse V penalty parameter [default: 1e-3].
-%       gamma: column sparse U penalty parameter for LR-GSSC [default: 1e-3].
+%       gamma: column sparse U penalty parameter for LR-GSSC [default: 1].
 %       maxit: maximum iterations [default: 100]
-%       tol: stopping tolerance [default: 1e-3]
-%       prtlevel, loglevel: [default: 0, 1]
+%       tol: stopping tolerance [default: 1e-5]
+%       prtlevel, loglevel: [default: 0, 0]
 %
 %   Returns:
 %     groups: N x 1 cluster assignment
@@ -40,12 +40,13 @@ function [groups, Y, history] = gssc(X, Omega, n, params)
 %       U, V: final iterates, if loglevel > 0.
 %       obj, obj_update, U_update: either per iteration or at termination.
 %       init_history: history from initialization
+%       sp_history: alt min sub-problem history
 %       mc_history: history from final group lrmc completion.
 %       iter, status, conv_cond: number of iterations, termination status,
 %         convergence condition at termination.
 %       rtime: total runtime in seconds
 tstart = tic;
-[D, ~] = size(X);
+[D, N] = size(X);
 Omega = logical(Omega);
 Omegac = ~Omega;
 X(Omegac) = 0;
@@ -55,12 +56,38 @@ if ~any(Omega(:))
 end
 
 if nargin < 4; params = struct; end
-fields = {'r', 'init', 'squared', 'lr_mode', 'lrmc_final', 'lambda', ...
-    'gamma', 'maxit', 'tol', 'prtlevel', 'loglevel'};
-defaults = {NaN, 'pzf-ensc+lrmc', 0, 0, 0, 1e-3, 1e-3, 100, 1e-3, 0, 1};
+fields = {'r', 'init', 'optim' 'squared', 'lr_mode', 'lrmc_final', ...
+    'lambda', 'gamma', 'maxit', 'tol', 'prtlevel', 'loglevel'};
+defaults = {NaN, 'pzf-ensc+lrmc', 'apg', 0, 0, 0, 1e-3, 1, 100, 1e-5, 0, 0};
 params = set_default_params(params, fields, defaults);
 if isnan(params.r); error('ERROR: subspace dimension r is required.'); end
 r = params.r;
+
+if strcmpi(params.optim, 'cvx')
+  gssc_Umin = @(U, V) gssc_Umin_cvx(X, Omega, U, V, params.r, ...
+      params.squared, params.lr_mode, params.gamma);
+  gssc_Vmin = @(U, V) gssc_Vmin_cvx(X, Omega, U, V, params.r, ...
+      params.squared, params.lambda);
+else
+  apg_params = struct('accel', 1, 'maxit', 500, 'tol', 1e-6, ...
+      'prtlevel', params.prtlevel-1, 'loglevel', params.loglevel-1);
+  gssc_Umin = @(U, V) gssc_Umin_apg(X, Omega, U, V, ...
+      params.lr_mode, params.gamma, apg_params);
+  gssc_Vmin = @(U, V) gssc_Vmin_apg(X, Omega, U, V, params.r, ...
+      params.lambda, apg_params);
+end
+
+function obj = gssc_objective(U, V)
+  obj = sum(sum((Omega.*(U*V' - X)).^2));
+  if ~params.squared
+    obj = sqrt(obj);
+  end
+  Vflat = reshape(V', params.r, []);
+  obj = obj + params.lambda * sum(sqrt(sum(Vflat.^2)));
+  if params.lr_mode
+    obj = obj + params.gamma * sum(sqrt(sum(U.^2)));
+  end
+end
 
 % if Y0, groups0 both provided, initialize U_i by svd. otherwise initialize
 % randomly.
@@ -82,22 +109,19 @@ if strcmpi(params.init, 'pzf-ensc+lrmc')
   end
 end
 U = (1/norm(U, 'fro')) * U;
-V = gssc_Vmin(X, Omega, U, n, r, params.squared, params.lambda);
+V = gssc_Vmin(U, 1e-3*randn(N, r*n));
 
-obj = gssc_objective(X, Omega, U, V, n, r, params.squared, params.lr_mode, ...
-    params.lambda, params.gamma);
+obj = gssc_objective(U, V);
 history.status = 1;
 for kk=1:params.maxit
   objprev = obj;
   Uprev = U;
 
-  U = gssc_Umin(X, Omega, V, n, r, params.squared, params.lr_mode, ...
-      params.gamma);
-  V = gssc_Vmin(X, Omega, U, n, r, params.squared, params.lambda);
-  obj = gssc_objective(X, Omega, U, V, n, r, params.squared, params.lr_mode, ...
-      params.lambda, params.gamma);
+  [U, history.sp_history{kk, 1}] = gssc_Umin(U, V);
+  [V, history.sp_history{kk, 2}] = gssc_Vmin(U, V);
+  obj = gssc_objective(U, V);
 
-  obj_update = objprev - obj;
+  obj_update = (objprev - obj)/(objprev + eps);
   U_update = infnorm(Uprev - U) / max(infnorm(U), 1e-3);
 
   if params.prtlevel > 0
@@ -141,24 +165,10 @@ history.rtime = toc(tstart);
 end
 
 
-function obj = gssc_objective(X, Omega, U, V, n, r, squared, lr_mode, ...
-    lambda, gamma)
-% gssc_objective    evaluate (LR-)GSSC objective.
+function [V, history] = gssc_Vmin_cvx(X, Omega, U, ~, r, squared, lambda)
+% gssc_Vmin_cvx   Solve V minimization using CVX 
 N = size(X, 2);
-obj = sum(sum((Omega.*(U*V' - X)).^2));
-if ~squared
-  obj = sqrt(obj);
-end
-obj = obj + lambda * sum(sqrt(sum(reshape(V',[r,N*n]).^2)));
-if lr_mode
-  obj = obj + gamma * sum(sqrt(sum(U.^2)));
-end
-end
-
-
-function V = gssc_Vmin(X, Omega, U, n, r, squared, lambda)
-% gssc_Vmin   minimize wrt V with U fixed.
-N = size(X, 2);
+n = size(U, 2) / r;
 cvx_begin quiet
 cvx_precision low
 variable V(N,n*r);
@@ -172,12 +182,37 @@ end
 pnlty = lambda * sum(norms(reshape(V',[r,N*n]),2,1));
 minimize(func + pnlty);
 cvx_end
+history = struct;
 end
 
 
-function U = gssc_Umin(X, Omega, V, n, r, squared, lr_mode, gamma)
-% gssc_Umin   minimize wrt U with V fixed.
+function [V, history] = gssc_Vmin_apg(X, Omega, U, V0, r, lambda, apg_params)
+% gssc_Vmin_apg   Solve V minimization using accelerated proximal gradient
+N = size(V0, 1);
+function [f, G] = vmin_ffun(V)
+  Res = Omega.*(U*V' - X);
+  f = sum(Res(:).^2);
+  if nargout > 1
+    G = 2*Res'*U;
+  end
+end
+function [theta, Z] = vmin_rfun(V, alpha)
+  Vflat = reshape(V', r, []);
+  theta = lambda * sum(sqrt(sum(Vflat).^2));
+  if nargout > 1
+    Zflat = prox_L21(Vflat, lambda*alpha);
+    Z = reshape(Zflat, [], N)';
+  end
+end
+[V, history] = apg(V0, @vmin_ffun, @vmin_rfun, apg_params);
+end
+
+
+function [U, history] = gssc_Umin_cvx(X, Omega, ~, V, r, squared, lr_mode, ...
+    gamma)
+% gssc_Umin_cvx   Solve U minimization using CVX 
 D = size(X, 1);
+n = size(V, 2) / r;
 cvx_begin quiet
 cvx_precision low
 variable U(D,n*r);
@@ -194,6 +229,35 @@ else
   norm(U,'fro')<=1;
 end
 cvx_end
+history = struct;
+end
+
+
+function [U, history] = gssc_Umin_apg(X, Omega, U0, V, lr_mode, gamma, ...
+    apg_params)
+% gssc_Umin_apg   Solve U minimization using accelerated proximal gradient
+function [f, G] = umin_ffun(U)
+  Res = Omega.*(U*V' - X);
+  f = sum(Res(:).^2);
+  if nargout > 1
+    G = 2*Res*V;
+  end
+end
+function [theta, Z] = umin_rfun(U, alpha)
+  if lr_mode
+    theta = gamma * sum(sqrt(sum(U.^2)));
+  else
+    theta = 0;
+  end
+  if nargout > 1
+    if lr_mode
+      Z = prox_L21(U, gamma*alpha);
+    else
+      Z = (1/(max(1, norm(U, 'fro'))+eps))*U;
+    end
+  end
+end
+[U, history] = apg(U0, @umin_ffun, @umin_rfun, apg_params);
 end
 
 

@@ -46,8 +46,8 @@ x = x0; xprev = x0;
 minupdate = inf;
 
 % Print form str.
-printformstr = ['k=%d \t update=%.2e \t obj=%.2e \t f=%.2e \t r=%.2e \t ' ...
-    'alpha=%.2e \t obj_dec=%.2e \t suff_dec=%d \n'];
+printformstr = ['k=%d, update=%.2e, obj=%.2e, f=%.2e, r=%.2e, ' ...
+    'alpha=%.2e, obj_dec=%.2e, suff_dec=%d \n'];
 
 % Accelerated proximal gradient loop.
 status = 1; iter = 0;

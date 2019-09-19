@@ -28,13 +28,19 @@ function [groups, Y, history] = s3lr(X, Omega, n, params)
 %       ladmm_mu, ladmm_rho, ladmm_mu_max: ADMM penalty parameter, increasing
 %         rate, max value [default: (1.25 / || X ||_2), 1.1, 1e4]
 %       maxit: maximum outer iterations [default: 50]
+%       tol: stopping tolerance [default: 1e-5]
 %       prtlevel, loglevel: [default: 0, 1]
 %
 %   Returns:
 %     groups: N x 1 cluster assignment
 %     Y: D x N data completion
 %     history: struct containing the following information
+%       C: N x N self-expression matrix, if loglevel > 0
+%       E: D x N corruption matrix, if loglevel > 0
 %       init_history: history from initialization
+%       obj, fc_norm, Theta_update, Y_update: objective, false connection norm,
+%         inverse co-occurrence update, completion update, per iteration if
+%         loglevel > 0.
 %       iter, status, conv_cond: number of iterations, termination status,
 %         convergence condition at termination.
 %       rtime: total runtime in seconds
@@ -73,7 +79,7 @@ elseif strcmpi(params.init, 'pzf-ensc+lrmc')
       'mc_method', 'lrmc', 'maxit', 1, 'prtlevel', params.prtlevel-1, ...
       'loglevel', 1);
   [~, Y, history.init_history] = alt_sc_mc(X, Omega, n, init_params);
-  C = history.init_history.C;
+  C = full(history.init_history.C);
 else
   Y = X;
   C = zeros(N);
@@ -146,9 +152,6 @@ if params.loglevel > 0
   history.E = E;
 else
   [history.C, history.E] = deal([]);
-end
-
-if params.loglevel <= 0
   history.obj = s3lr_objective(C, Y, E, Theta, groups, params.lambda, ...
       params.gamma, params.alpha);
   history.fc_norm = fc_norm;

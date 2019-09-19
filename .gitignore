@@ -12,3 +12,5 @@
 *.bbl
 *.m~
 *.swp
+test_results
+.snips

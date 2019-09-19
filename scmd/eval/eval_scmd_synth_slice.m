@@ -7,14 +7,15 @@ function [ell_thr, cluster_errs, ...
 %
 %   [ell_thr, cluster_errs, ...
 %       summary, histories] = eval_scmd_synth_slice(n, d, D, Ng, sigma, ...
-%       method_name, solver, params, opts)   
+%       method_name, solver, params, opts)
 if nargin < 9; opts = struct; end
 fields = {'target_err', 'bisect_maxit', 'center_window', 'seed_start', ...
-    'nseed', 'paridx', 'out_summary', 'out_mat'};
-defaults = {0.05, 10, 5, 1e5, 20, 0, 0, '', ''};
+    'nseed', 'paridx', 'out_summary', 'out_mat', 'prtlevel'};
+defaults = {0.05, 10, 5, 1e5, 20, 0, 0, '', '', 0};
 opts = set_default_params(opts, fields, defaults);
 opts.target_err = max(opts.target_err, 5/(n*Ng));
-trial_opts = struct('paridx', opts.paridx, 'out_summary', opts.out_summary);
+trial_opts = struct('paridx', opts.paridx, 'out_summary', opts.out_summary, ...
+    'quiet', 1);
 
 % overwrite output summary and write header
 if ~isempty(opts.out_summary)
@@ -27,7 +28,7 @@ end
 ell_thr = NaN; center_idx = NaN;
 [summary, histories] = deal(cell(0));
 ME = [];
-  
+
 % will consider complete range of ell values, but should only evaluate a narrow
 % sub-interval, even for very large D
 ells = d:D; nell = length(ells);
@@ -60,8 +61,10 @@ try
         summary, histories, trial_opts); check_status(status);
     cluster_errs(center_idx) = cluster_err;
 
-    % fprintf('k=%d, low=%d, idx=%d, hi=%d, err=%.4f, rt=%.3f \n', kk, low_idx, ...
-    %     center_idx, high_idx, cluster_err, toc);
+    if opts.prtlevel > 0
+      fprintf('k=%d, low=%d, idx=%d, hi=%d, err=%.4f, rt=%.3f \n', kk, low_idx, ...
+          center_idx, high_idx, cluster_err, toc);
+    end
 
     if cluster_err <= opts.target_err
       high_idx = center_idx;
@@ -89,10 +92,16 @@ try
   % possibly truncate if window is too large, and evaluate previously untested
   Idx = Idx(Idx >= 1 & Idx <= nell);
   for idx=Idx(isnan(cluster_errs(Idx)))
+    tic;
+    kk = kk + 1;
     [cluster_errs(idx), seed, status, ...
         summary, histories] = eval_scmd_synth_run(n, d, D, Ng, sigma, ...
         ells(idx), seed, method_name, solver, params, opts.nseed, ...
         summary, histories, trial_opts); check_status(status);
+    if opts.prtlevel > 0
+      fprintf('k=%d, idx=%d, err=%.4f, rt=%.3f \n', kk, idx, ...
+          cluster_errs(idx), toc);
+    end
   end
 
   % update center after finer evaluation and get ell threshold
@@ -111,11 +120,11 @@ if ~isempty(opts.out_mat)
       'center_idx', 'ell_thr', 'summary', 'histories', 'ME');
 end
 
-% if isempty(ME)
-%   plot(cluster_errs(Idx, 1), cluster_errs(Idx, 2), 'ko-', ...
-%        cluster_errs(Idx, 1), opts.target_err*ones(length(Idx), 1), 'b-', ...
-%       'MarkerSize', 5, 'LineWidth', 2);
-% end
+if isempty(ME) && opts.prtlevel > 1
+  plot(cluster_errs(Idx, 1), cluster_errs(Idx, 2), 'ko-', ...
+       cluster_errs(Idx, 1), opts.target_err*ones(length(Idx), 1), 'b-', ...
+      'MarkerSize', 5, 'LineWidth', 2);
+end
 end
 
 

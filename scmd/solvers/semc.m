@@ -24,7 +24,7 @@ function [Y, history] = semc(X, Omega, C, eta)
 %       iter, status, conv_cond: always zero, included for consistency.
 %       rtime: total runtime in seconds.
 tstart = tic;
-[D, N] = size(X);
+[~, N] = size(X);
 Omega = logical(Omega);
 Omegac = ~Omega;
 X(Omegac) = 0;
@@ -32,24 +32,9 @@ C = full(C);
 
 if nargin < 4; eta = 0; end
 
-Y = X;
-ICT = (eye(N) - C)';
-for ii=1:D
-  omegai = Omega(ii, :);
-  % if no observed entries, do nothing
-  if sum(omegai) > 0
-    omegaic = Omegac(ii, :);
-    xi = X(ii, :)';
+IC = (eye(N) - C);
+Y = lsqrmd(X, Omega, IC, eta);
 
-    A = ICT(:, omegaic);
-    b = - (ICT(:, omegai) * xi(omegai));
-    if eta > 0
-      Y(ii, omegaic) = (A' * A + eta * eye(size(A, 2))) \ (A' * b);
-    else
-      Y(ii, omegaic) = A \ b;
-    end
-  end
-end
 history.conv_cond = 0; history.iter = 0; history.status = 0;
 history.rtime = toc(tstart);
 end
