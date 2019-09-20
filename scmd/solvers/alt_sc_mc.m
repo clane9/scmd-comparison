@@ -18,7 +18,7 @@ function [groups, Y, history] = alt_sc_mc(X, Omega, n, params)
 %       ensc_lambda0: least-squares penalty relative to minimum lambda required
 %         to guarantee non-zero self-expressions [default: 20]
 %       ensc_gamma: elastic net tradeoff parameter [default: 0.9]
-%       tsc_q: number of TSC nearest neighbors [default: max(3, N/(20 n))]
+%       tsc_qfrac: number of TSC nearest neighbors [default: .05]
 %       mc_method: which mc method ('lrmc', 'semc') [default: 'lrmc']
 %       semc_eta: l2 squared regularization parameter in semc [default: 0]
 %       lrmc_maxit: maximum iterations in alm_mc [default: 500]
@@ -58,12 +58,12 @@ iscomplete = all(Omega(:));
 % parse params and minimal checking
 if nargin < 4; params = struct; end
 fields = {'init', 'sc_method', 'ensc_pzf', 'ensc_lambda0', 'ensc_gamma', ...
-    'tsc_q', 'mc_method', 'semc_eta', 'lrmc_maxit', 'lrmc_tol', ...
+    'tsc_qfrac', 'mc_method', 'semc_eta', 'lrmc_maxit', 'lrmc_tol', ...
     'maxit', 'tol', 'prtlevel', 'loglevel'};
-defaults = {'zf', 'ensc', 1, 20, 0.9, NaN, 'lrmc', 0, 500, 1e-5, 1, 1e-5, ...
+defaults = {'zf', 'ensc', 1, 20, 0.9, 0.05, 'lrmc', 0, 500, 1e-5, 1, 1e-5, ...
     0, 0};
 params = set_default_params(params, fields, defaults);
-if isnan(params.tsc_q); params.tsc_q = max(3, ceil(N/(20*n))); end
+params.tsc_q = max(3, ceil(params.tsc_qfrac * N/n));
 
 semc_mode = strcmpi(params.mc_method, 'semc');
 if strcmpi(params.sc_method, 'tsc') && semc_mode

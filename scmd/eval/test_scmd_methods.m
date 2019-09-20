@@ -3,10 +3,10 @@ function test_scmd_methods
 %   example
 
 % relatively easy synthetic data example
-n = 5; d = 5; D = 25; Ng = 50; sigma = 0.0; ell = 20; seed = 2001;
+n = 5; d = 5; D = 25; Ng = 50; sigma = 0; ell = 20; seed = 2001;
 
 test_all = 1;
-test_methods = {'lrmc+ssc'};
+test_methods = {'srme-mc'};
 prtlevel = 0;
 loglevel = 0;
 
@@ -187,8 +187,8 @@ method_name = 'S3LR';
 tstart = tic;
 if test_all || any(strcmpi(method_name, test_methods))
   fprintf('Testing %s... \n\n', method_name);
-  params = struct('init', 'pzf-ensc+lrmc', 'maxit', 10, ...
-      'prtlevel', prtlevel, 'loglevel', loglevel);
+  params = struct('init', 'pzf-ensc+lrmc', 'maxit', 10, 'gamma', 0.02, ...
+      'lambda', 20, 'alpha', 1, 'prtlevel', prtlevel, 'loglevel', loglevel);
   solver = 's3lr';
   [cluster_err, comp_err, ~] = eval_scmd_synth_trial(n, d, D, Ng, sigma, ...
       ell, seed, method_name, solver, params);

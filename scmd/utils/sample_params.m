@@ -10,7 +10,7 @@ function par_mat = sample_params(nsamples, par_choices, seed)
 %
 %   Returns:
 %     par_mat: nsamples x npar matrix of parameter settings
-if nargout >= 3; rng(seed); end
+if nargin >= 3; rng(seed); end
 
 npar = length(par_choices);
 par_mat = NaN(nsamples, npar);
