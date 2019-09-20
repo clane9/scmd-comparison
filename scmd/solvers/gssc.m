@@ -18,7 +18,8 @@ function [groups, Y, history] = gssc(X, Omega, n, params)
 %     Omega: D x N logical indicator of observed entries
 %     n: number of clusters
 %     params: struct containing the following problem parameters.
-%       r: subspace dimension (required)
+%       r: subspace dimension, supersedes rfrac if given [default: none]
+%       rfrac: subspace dimension relative to D [default: 0.5]
 %       init: initialization method ('random', 'pzf-ensc+lrmc') [default:
 %         pzf-ensc+lrmc]
 %       optim: optimization method ('cvx', 'apg') [default: 'apg']
@@ -56,12 +57,12 @@ if ~any(Omega(:))
 end
 
 if nargin < 4; params = struct; end
-fields = {'r', 'init', 'optim' 'squared', 'lr_mode', 'lrmc_final', ...
+fields = {'r', 'rfrac', 'init', 'optim' 'squared', 'lr_mode', 'lrmc_final', ...
     'lambda', 'gamma', 'maxit', 'tol', 'prtlevel', 'loglevel'};
-defaults = {NaN, 'pzf-ensc+lrmc', 'apg', 0, 0, 0, 1e-3, 1, 100, 1e-5, 0, 0};
+defaults = {NaN, 0.5, 'pzf-ensc+lrmc', 'apg', 0, 0, 0, 1e-3, 1, 100, 1e-5, ...
+    0, 0};
 params = set_default_params(params, fields, defaults);
-if isnan(params.r); error('ERROR: subspace dimension r is required.'); end
-r = params.r;
+if isnan(params.r); params.r = ceil(params.rfrac * D); end
 
 if strcmpi(params.optim, 'cvx')
   gssc_Umin = @(U, V) gssc_Umin_cvx(X, Omega, U, V, params.r, ...
@@ -91,7 +92,7 @@ end
 
 % if Y0, groups0 both provided, initialize U_i by svd. otherwise initialize
 % randomly.
-U = (1/sqrt(D)) * randn(D, r*n);
+U = (1/sqrt(D)) * randn(D, params.r *n);
 if strcmpi(params.init, 'pzf-ensc+lrmc')
   init_params = struct('init', 'zf', 'sc_method', 'ensc', 'ensc_pzf', 1, ...
       'mc_method', 'lrmc', 'maxit', 1, 'prtlevel', params.prtlevel-1, ...
@@ -101,15 +102,15 @@ if strcmpi(params.init, 'pzf-ensc+lrmc')
     maski = groups == ii;
     % we initialize randomly and then overwrite to ensure unused columns are
     % non-zero.
-    ri = min(sum(maski), r);
+    ri = min(sum(maski), params.r);
     if ri > 0
-      startidx = r*(ii-1) + 1;
+      startidx = params.r*(ii-1) + 1;
       [U(:, startidx:(startidx+ri-1)), ~, ~] = svds(Y(:, maski), ri);
     end
   end
 end
 U = (1/norm(U, 'fro')) * U;
-V = gssc_Vmin(U, 1e-3*randn(N, r*n));
+V = gssc_Vmin(U, 1e-3*randn(N, params.r*n));
 
 obj = gssc_objective(U, V);
 history.status = 1;
@@ -139,7 +140,7 @@ for kk=1:params.maxit
   end
 end
 
-groups = assign_groups(V, n, r);
+groups = assign_groups(V, n, params.r);
 
 if params.lrmc_final
   lrmc_params = struct('maxit', 500, 'tol', 1e-5, 'prtlevel', 0, ...

@@ -122,7 +122,7 @@ while kk < params.maxit
     [C, history.sc_history{kk}] = weight_ensc_spams(unitY, W, ensc_params);
     A = build_affinity(C);
   end
-  groups = SpectralClustering(A, n, 'Eig_Solver', 'eigs');
+  groups = SpectralClustering(A, n);
   % use hungarian algorithm to measure change in clustering.
   groups_update = 1 - evalAccuracy(groups_prev, groups);
   C_update = full(infnorm(C - C_prev) / relthr);

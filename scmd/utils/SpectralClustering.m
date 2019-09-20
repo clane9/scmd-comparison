@@ -1,68 +1,44 @@
-function groups = SpectralClustering(W, n, varargin) 
-%SPECTRALCLUSTERING Spectral clustering.
-%   GROUPS = SpectralClustering(W, N, varargin) clusters data into N groups
-%   with affinity W.
+%--------------------------------------------------------------------------
+% This function takes an adjacency matrix of a graph and computes the
+% clustering of the nodes using the spectral clustering algorithm of
+% Ng, Jordan and Weiss.
+% A: NxN adjacency matrix
+% n: number of groups for clustering
+% groups: N-dimensional vector containing the memberships of the N points
+% to the n groups obtained by spectral clustering
+%--------------------------------------------------------------------------
+% Copyright @ Ehsan Elhamifar, 2012
+% Modified @ Chong You, 2015
+% Modified @ Connor Lane, 2018
+%--------------------------------------------------------------------------
 
-% Input Arguments
-% W                -- symmetric affinity matrix.
-% n                -- number of groups.
-% 'Start'          -- initial group for k-means.
-%     'sample'(default):
-%     the same as the k-means
-% 'MaxIter'        -- maximum number of iterations for KMeans 
-%     1000(default):
-%     positive integer
-% 'Replicates'     -- number of replications for KMeans
-%     20(default):
-%     positive integer
-% 'Eig_Solver'     -- eig function of matlab
-%     eig(default):
-%     eigs
+function groups = SpectralClustering(A, n)
 
-% Algorithm (Ncut)
-% Ncut: min_{A_i} sum_i cut(A_i, bar(A)_i) / vol(A_i),
-% reformulate as min_{A_i} \sum_i h_i' L h_i 
-% s.t. h_ij = 1 / sqrt(Vol(A_j)), if v_i \in A_j
-% relax as min_H tr(H' L H) s.t. H' D H = I
-% solution is H = D^{-0.5} eig(L_sym).
-% in this version, do another row normalization of H.
+% disable excessive illconditioning warnings
+orig_state = warning;
+warning('off','all')
 
-% Copyright Chong You @ Johns Hopkins University, 2016
-% chong.you1987@gmail.com
-
-% check data
-if ~issymmetric(W)
-    error(['In ''' mfilename ''': affinity matrix is not symmetric'])
+if ~issymmetric(A)
+  error('Affinity is not symmetric.')
 end
-% define defaults options
-% Set default 
-vararg = {'Start', 'plus', ...
-          'MaxIter', 1000, ...
-          'Replicates', 20, ...
-          'Eig_Solver', 'eig'};
-% Overwrite by input
-vararg = vararginParser(vararg, varargin);
-% Generate variables
-for pair = reshape(vararg, 2, []) % pair is {propName;propValue}
-   eval([pair{1} '= pair{2};']);
+if min(min(A)) < 0
+  error('Affinity contains negative values.')
 end
+N = size(A,1);
+MAXiter = 1000; % Maximum number of iterations for KMeans
+REPlic = 20; % Number of replications for KMeans
 
 % Normalized spectral clustering according to Ng & Jordan & Weiss
-% using Normalized Symmetric Laplacian L = I - D^{-1/2} W D^{-1/2}
-% The computation is equivalent to:
-% - compute the largest eigenvectors of D^{-1} W
-% - normalize the rows of the resultant matrix
-% - then apply kmeans to the rows.
-if strcmpi(Eig_Solver, 'eig')
-    [V, D] = eig( cnormalize(full(W), 1)' );
-    [~, ord] = sort(real(diag(D)), 'descend');
-    kerN = V(:, ord(1:n));
-    clear V D;
-elseif strcmpi(Eig_Solver, 'eigs')
-    [kerN, ~] = eigs( cnormalize(W, 1)', n, 'LR' );
+% using Normalized Symmetric Laplacian L = I - D^{-1/2} W D^{-1/2}.
+DN = spdiags(1./sqrt(sum(A)+eps)', 0, N, N);
+LapN = speye(N) - DN*A*DN;
+LapN = 0.5*(LapN + LapN'); % Enforce symmetry.
+% Using smallestabs setting is crucial when all eigenvalues are very close to
+% zero
+[vN, ~] = eigs(LapN, n, 'smallestabs');
+normN = sqrt(sum(vN.^2, 2));
+kerNS = vN ./ repmat(normN + eps, [1, n]);
+groups = kmeans(kerNS,n,'maxiter',MAXiter,'replicates',REPlic);
+
+warning(orig_state);
 end
-kerN = cnormalize_inplace(kerN')';
-groups = kmeans(kerN, n, 'Start', Start, ...
-                         'MaxIter', MaxIter, ...
-                         'Replicates', Replicates, ...
-                         'EmptyAction', 'singleton');

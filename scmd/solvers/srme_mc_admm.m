@@ -175,7 +175,7 @@ for kk=1:params.maxit
 end
   
 W = build_affinity(C);
-groups = SpectralClustering(W, n, 'Eig_Solver', 'eigs');
+groups = SpectralClustering(W, n);
 
 if params.loglevel > 0
   history.C = C; history.E = E;

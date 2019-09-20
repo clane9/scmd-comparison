@@ -109,7 +109,7 @@ for kk=1:params.maxit
   % spectral clustering step. here we just use the same implementation used in
   % other algorithms.
   A = build_affinity(C);
-  groups = SpectralClustering(A, n, 'Eig_Solver', 'eigs');
+  groups = SpectralClustering(A, n);
   Theta = flip_co_occur(groups);
 
   fc_norm = norm(Theta .* C, 'fro');

@@ -38,14 +38,17 @@ seed = opts.seed_start;
 try
   % first compute errors at extremes
   for idx=[1 nell]
-    [cluster_errs(idx), seed, status, ...
+    [cluster_errs(idx), seed, failfrac, ...
         summary, histories] = eval_scmd_synth_run(n, d, D, Ng, sigma, ...
         ells(idx), seed, method_name, solver, params, opts.ntrial, ...
-        summary, histories, trial_opts); check_status(status);
+        summary, histories, trial_opts); check_status(failfrac);
   end
 
   % set target error relative to that observed for complete data
   opts.target_err = 1 - (1-opts.target_err)*(1-cluster_errs(nell));
+  if opts.prtlevel > 0
+    fprintf('err complete=%.4f, target=%.4f \n', cluster_errs(nell), opts.target_err);
+  end
 
   % find "center index" corresponding to largest ell s.t. error <= target for all
   % ell' > ell, using bisection.
@@ -55,15 +58,15 @@ try
     center_idx = floor(0.5*(low_idx + high_idx));
     ell = ells(center_idx);
 
-    [cluster_err, seed, status, ...
+    [cluster_err, seed, failfrac, ...
         summary, histories] = eval_scmd_synth_run(n, d, D, Ng, sigma, ...
         ell, seed, method_name, solver, params, opts.ntrial, ...
-        summary, histories, trial_opts); check_status(status);
+        summary, histories, trial_opts); check_status(failfrac);
     cluster_errs(center_idx) = cluster_err;
 
     if opts.prtlevel > 0
-      fprintf('k=%d, low=%d, idx=%d, hi=%d, err=%.4f, rt=%.3f \n', kk, low_idx, ...
-          center_idx, high_idx, cluster_err, toc);
+      fprintf('k=%d, fail=%.2f, low=%d, idx=%d, hi=%d, err=%.4f, rt=%.3f \n', ...
+          kk, failfrac, low_idx, center_idx, high_idx, cluster_err, toc);
     end
 
     if cluster_err <= opts.target_err
@@ -94,19 +97,23 @@ try
   for idx=Idx(isnan(cluster_errs(Idx)))
     tic;
     kk = kk + 1;
-    [cluster_errs(idx), seed, status, ...
+    [cluster_errs(idx), seed, failfrac, ...
         summary, histories] = eval_scmd_synth_run(n, d, D, Ng, sigma, ...
         ells(idx), seed, method_name, solver, params, opts.ntrial, ...
-        summary, histories, trial_opts); check_status(status);
+        summary, histories, trial_opts); check_status(failfrac);
     if opts.prtlevel > 0
-      fprintf('k=%d, idx=%d, err=%.4f, rt=%.3f \n', kk, idx, ...
-          cluster_errs(idx), toc);
+      fprintf('k=%d, fail=%.2f, idx=%d, err=%.4f, rt=%.3f \n', kk, failfrac, ...
+          idx, cluster_errs(idx), toc);
     end
   end
 
   % update center after finer evaluation and get ell threshold
   center_idx = find(cluster_errs > opts.target_err, 1, 'last');
   ell_thr = ells(center_idx);
+  
+  if opts.prtlevel > 0
+    fprintf('ell threshold=%d \n', ell_thr);
+  end
 catch ME
   warning('many errors for %s (n=%d,d=%d,D=%d,Ng=%d,sigma=%.3e)', ...
       method_name, n, d, D, Ng, sigma);
@@ -128,7 +135,7 @@ end
 end
 
 
-function [cluster_err, seed, status, ...
+function [cluster_err, seed, failfrac, ...
     summary, histories] = eval_scmd_synth_run(n, d, D, Ng, sigma, ...
     ell, seed, method_name, solver, params, ntrial, summary, ...
     histories, trial_opts)
@@ -142,13 +149,13 @@ for ii=1:ntrial
       histories{trialidx}] = eval_scmd_synth_trial(n, d, D, Ng, sigma, ell, ...
       seed, method_name, solver, params, trial_opts);
 end
-status = mean(isnan(cluster_errs)) > 0.2;
+failfrac = mean(isnan(cluster_errs));
 cluster_err = nanmedian(cluster_errs);
 end
 
 
-function check_status(status)
-if status ~= 0
+function check_status(failfrac)
+if failfrac > 0.2
   error('too many failures')
 end
 end
