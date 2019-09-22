@@ -53,12 +53,20 @@ OOmega = ord2_tensorize(Omega);
 % pull back into original space by taking top singular vector of each
 % tensorized completion
 Y = zeros(D, N);
+yy = zeros(D);
+triumask = reshape(triu(ones(D)), [], 1) == 1;
 history.max_sv2 = 0;
 for jj=1:N
-  yy = reshape(YY(:, jj), [D D]);
+  % extract upper triangle vector as symmetric matrix
+  yy(:) = 0; yy(triumask) = YY(:, jj);
+  diagyy = diag(yy); yy = yy + yy'; yy(1:D+1:end) = diagyy;
+  % top 2 singular vectors
   [U, S, ~] = svds(yy, 2);
   s = diag(S);
-  Y(:, jj) = sqrt(s(1)) * U(:, 1);
+  y = sqrt(s(1)) * U(:, 1);
+  % flip sign based on observed entries if necessary
+  omega = Omega(:, jj); xobs = X(omega, jj);
+  Y(:, jj) = sign(y(omega)'*xobs)*y;
   history.max_sv2 = max(history.max_sv2, s(2)/(s(1)+eps));
 end
 
@@ -77,4 +85,7 @@ ZZ = repmat(reshape(Z, [D 1 N]), [1 D 1]) .* ...
     repmat(reshape(Z, [1 D N]), [D 1 1]);
 % flatten first two dims
 ZZ = reshape(ZZ, [], N);
+% extract upper triangle
+triumask = reshape(triu(ones(D)), [], 1) == 1;
+ZZ = ZZ(triumask, :);
 end

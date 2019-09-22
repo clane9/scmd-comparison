@@ -6,8 +6,8 @@ function test_scmd_methods
 n = 5; d = 5; D = 25; Ng = 50; sigma = 0; ell = 20; seed = 2001;
 
 test_all = 1;
-test_methods = {'lr-gssc'};
-prtlevel = 0;
+test_methods = {'ladmc+ssc'};
+prtlevel = 1;
 loglevel = 0;
 
 % ===============================================================================
@@ -141,7 +141,7 @@ if test_all || any(strcmpi(method_name, test_methods))
   rtime = toc(tstart);
   fprintf('\n(%s) cluster=%.4f, comp=%.3e, rtime=%.4f \n\n', method_name, ...
       cluster_err, comp_err, rtime)
-  check_isclose(method_name, [cluster_err comp_err], [0.1360 1.244e-00]);
+  check_isclose(method_name, [cluster_err comp_err], [0.0000 3.509e-01]);
 end
 
 % ===============================================================================
